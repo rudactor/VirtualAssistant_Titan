@@ -1,69 +1,56 @@
-# -*- coding: utf-8 -*-
-import os, glob
-from typing import List
-import chromadb
-from chromadb.utils import embedding_functions
-from sentence_transformers import SentenceTransformer
-from utils import read_file, chunk_text, make_ids
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import OllamaEmbeddings
+import os
 
-DB_PATH = "./chroma_db"
-COLLECTION = "rzd_docs"
-DATA_DIR = "./documentation"
+EMBEDDING_MODEL = 'bge-m3'
+BASE = "documentation/"
+DB_PATH = "./sql_chroma_db"
 
-class E5Embedder:
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-base"):
-        self.model = SentenceTransformer(model_name)
+list_files = os.listdir(BASE)
 
-    def embed_passages(self, texts: List[str]) -> List[List[float]]:
-        prep = [f"passage: {t}" for t in texts]
-        return self.model.encode(prep, normalize_embeddings=True).tolist()
+embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
 
-    def embed_queries(self, texts: List[str]) -> List[List[float]]:
-        prep = [f"query: {t}" for t in texts]
-        return self.model.encode(prep, normalize_embeddings=True).tolist()
+def add_chunk_to_database(chunks):
+    Chroma.from_documents(documents=chunks,  embedding=embeddings, persist_directory=DB_PATH)
+    print(f"✅ Добавлено {len(chunks)} чанков в базу")
 
-def get_collection():
-    client = chromadb.PersistentClient(path=DB_PATH)
-    col = client.get_or_create_collection(
-        name=COLLECTION,
-        metadata={"hnsw:space": "cosine"}
+def ingest_pdf(pdf_path: str):
+    loader = PyPDFLoader(pdf_path)
+    pages = loader.load_and_split()
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1024,
+        chunk_overlap=100,
+        length_function=len,
+        add_start_index=True,
     )
-    return col
-
-def upsert_document(path: str, embedder: E5Embedder):
-    text, pages = read_file(path)
-    if not text:
-        return
-
-    chunks = chunk_text(text, max_chars=1200, overlap=200)
-    if not chunks:
-        return
-
-    doc_name = os.path.basename(path)
-    doc_id_prefix = f"{doc_name}"
-    ids = make_ids(doc_id_prefix, len(chunks))
-    embeddings = embedder.embed_passages(chunks)
-
-    col = get_collection()
-    existing = col.get(ids=None, where={"source": doc_name})
-    if existing and existing.get("ids"):
-        col.delete(where={"source": doc_name})
-
-    col.add(
-        ids=ids,
-        documents=chunks,
-        embeddings=embeddings,
-        metadatas=[{"source": doc_name} for _ in chunks]
+    
+    chunks = text_splitter.split_documents(pages)
+    print(f"Split {len(pages)} documents into {len(chunks)} chunks.")
+    add_chunk_to_database(chunks)
+    
+    
+def ingest_docx(docx_path: str):
+    loader = Docx2txtLoader(docx_path)
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1024,
+        chunk_overlap=100,
+        length_function=len,
+        add_start_index=True,
     )
-    print(f"Indexed: {doc_name} ({len(chunks)} chunks)")
+    chunks = text_splitter.split_documents(documents)
+    
+    print(f"[DOCX] Split {len(documents)} documents into {len(chunks)} chunks.")
+    add_chunk_to_database(chunks)
 
-if __name__ == "__main__":
-    embedder = E5Embedder()
-    paths = []
-    paths += glob.glob(os.path.join(DATA_DIR, "*.pdf"))
-    paths += glob.glob(os.path.join(DATA_DIR, "*.docx"))
-    paths += glob.glob(os.path.join(DATA_DIR, "*.txt"))
-
-    for p in paths:
-        upsert_document(p, embedder)
-    print("✅ Done. Chroma persisted to", DB_PATH)
+def parser_files():
+    for file in list_files:
+        if file.endswith(".pdf"):
+            ingest_pdf(f"{BASE}{file}")
+            
+        elif file.endswith(".docx"):
+            ingest_docx(f"{BASE}{file}")
+            
+parser_files()
