@@ -34,3 +34,10 @@ class DataBase(object):
             return response.data
         except Exception as e:
             print(e)
+            
+# db = DataBase()
+# db._add_data({
+#     "login": '12345',
+#     "password": "12353151",
+#     "role": "worker"
+# })
