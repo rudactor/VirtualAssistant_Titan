@@ -21,10 +21,10 @@ class BackendApp(object):
         self.request = ""
 
     def init_routes(self):
-        self.app.get('/') (self.root)
-        self.app.post("/registr") (self.registration)
-        self.app.post("/auth") (self.authorization)
-        self.app.post("/send") (self.create_request)
+        self.app.get('/') (self.root)                           # получение ответа от ассистента
+        self.app.post("/reg") (self.registration)               # регистрация   
+        self.app.post("/auth") (self.authorization)             # авторизация
+        self.app.post("/send") (self.create_request)            # отправить вопрос ассистенту
     
     async def root(self):
         self.answer = main(self.request) if self.request else 'no yet'
