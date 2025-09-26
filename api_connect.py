@@ -22,9 +22,6 @@ class BackendApp(object):
     async def root(self):
         self.answer = main(self.request)
         return {"message": self.answer}, Response(status_code=status.HTTP_200_OK)
-    
-    async def get_info(self):
-        return {"message": self.req}, Response(status_code=status.HTTP_200_OK)
 
     async def create_request(self, data: RequestData):
         self.request = data.question
