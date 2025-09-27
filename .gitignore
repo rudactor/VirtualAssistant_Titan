@@ -1,0 +1,8 @@
+backend/sql_chroma_db/
+backend/models/
+.venv/
+backend/.env
+backend/__pycache__/
+backend/chatbot.sqlite3
+.DS_STORE
+backend/.DS_STORE
