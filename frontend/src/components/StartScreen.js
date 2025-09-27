@@ -3,13 +3,17 @@ import { useState } from "react";
 import Registration from "./Registration";
 import Authorization from "./Authorization";
 
-export default function StartScreen() {
+export default function StartScreen({ setAuth }) {
   const [popupReg, setPopupReg] = useState(false);
   const [popupAuth, setPopupAuth] = useState(false);
 
   return (
     <div>
-      {popupReg ? <Registration setPopup={setPopupReg} /> : ""}
+      {popupReg ? (
+        <Registration setPopup={setPopupReg} setAuth={setAuth} />
+      ) : (
+        ""
+      )}
       {popupAuth ? <Authorization setPopup={setPopupAuth} /> : ""}
       <div className="container">
         <div className="block-info">

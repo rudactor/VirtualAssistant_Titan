@@ -6,6 +6,7 @@
   height: 100%;
   background: rgba(0, 0, 0, 0.5);
   display: flex;
+  cursor: pointer;
   justify-content: center;
   align-items: center;
   z-index: 1000;
@@ -13,7 +14,7 @@
 
 .popup-container {
   background: #fff;
-  cursor: pointer;
+  cursor: default;
   padding: 2rem;
   border-radius: 12px;
   width: 350px;
