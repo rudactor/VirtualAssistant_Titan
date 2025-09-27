@@ -1,6 +1,5 @@
+# ingest.py
 import os
-import json
-import hashlib
 from typing import Iterable, List, Tuple, Optional
 
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
@@ -36,6 +35,7 @@ def _splitter() -> RecursiveCharacterTextSplitter:
         length_function=len, add_start_index=True
     )
 
+def _good(text: str) -> bool:
 def _good(text: str) -> bool:
     s = (text or "").strip()
     if len(s) < MIN_CHARS:
@@ -135,6 +135,18 @@ def _vs() -> Chroma:
 def _add(vs: Chroma, docs: List[Document], scope: str):
     if not docs:
         return 0, 0
+    ids = [
+        _doc_id(
+            d.metadata["source"],
+            int(d.metadata.get("page", 0)),
+            int(d.metadata.get("start_index", 0)),
+            d.page_content,
+            scope,
+        )
+        for d in docs
+    ]
+    for d in docs:
+        d.metadata["scope"] = scope
     ids = [
         _doc_id(
             d.metadata["source"],
