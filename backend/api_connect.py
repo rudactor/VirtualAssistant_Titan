@@ -17,7 +17,7 @@ class BackendApp(object):
         self.app = FastAPI()
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["http://localhost:3002"],  # фронтенд
+            allow_origins=["http://localhost:3001"],  # фронтенд
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
