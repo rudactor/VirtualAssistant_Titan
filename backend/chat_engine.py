@@ -93,7 +93,7 @@ def get_messages(chat_id: int) -> List[Tuple[str, str]]:
     conn = _db(); cur = conn.cursor()
     cur.execute("SELECT role, content, created_at FROM messages WHERE chat_id=? ORDER BY created_at ASC", (chat_id,))
     rows = cur.fetchall(); conn.close()
-    return [(r["role"], r["content"], r['cr']) for r in rows]
+    return [(r["role"], r["content"], r['created_at']) for r in rows]
 
 # ========= История =========
 def _total_chars(pairs: List[Tuple[str, str]]) -> int:
