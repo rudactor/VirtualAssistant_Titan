@@ -1,39 +1,72 @@
-from llama_cpp import Llama
+# llama_cpp_local_llm.py
 import os
+from functools import lru_cache
+from typing import Dict, Any
+from llama_cpp import Llama
 
-MODEL_PATH = os.environ.get("LLM_GGUF_PATH", "./models/qwen2.5-3b-instruct-q4_k_m.gguf")
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_GGUF = os.path.join(BACKEND_DIR, "models", "qwen2.5-3b-instruct-q4_k_m.gguf")
 
-def detect_n_gpu_layers() -> int:
+MODEL_PATH = os.environ.get("LLM_GGUF_PATH", DEFAULT_GGUF)
+
+def _detect_n_gpu_layers() -> int:
     if "LLM_N_GPU_LAYERS" in os.environ:
         return int(os.environ["LLM_N_GPU_LAYERS"])
     try:
         import torch
-        if torch.cuda.is_available() or getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-            return 32   # GPU берёт часть нагрузки
-    except ImportError:
-        pass
-    return 0  # fallback: CPU-only
+        has_cuda = hasattr(torch, "cuda") and torch.cuda.is_available()
+        has_mps = getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+        return 20 if (has_cuda or has_mps) else 0
+    except Exception:
+        return 0
 
-llm = Llama(
-    model_path=MODEL_PATH,
-    n_ctx=int(os.environ.get("LLM_CONTEXT", "4096")),
-    n_threads=int(os.environ.get("LLM_THREADS", str(os.cpu_count() or 4))),
-    n_batch=int(os.environ.get("LLM_BATCH", "256")),
-    n_gpu_layers=detect_n_gpu_layers(),
-    chat_format="qwen",
-    verbose=False, 
-)
+def _safe_batch_default() -> int:
+    if "LLM_BATCH" in os.environ:
+        return int(os.environ["LLM_BATCH"])
+    try:
+        import torch
+        has_mps = getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+        return 128 if has_mps else 256
+    except Exception:
+        return 256
+
+@lru_cache(maxsize=1)
+def _llm() -> Llama:
+    if not MODEL_PATH or not os.path.exists(MODEL_PATH):
+        raise RuntimeError(
+            f"GGUF-модель не найдена: {MODEL_PATH}\n"
+            "Укажи путь в переменной окружения LLM_GGUF_PATH."
+        )
+    return Llama(
+        model_path=MODEL_PATH,
+        n_ctx=int(os.environ.get("LLM_CONTEXT", "4096")),
+        n_threads=int(os.environ.get("LLM_THREADS", str(os.cpu_count() or 4))),
+        n_batch=_safe_batch_default(),
+        n_gpu_layers=_detect_n_gpu_layers(),
+        chat_format=os.environ.get("LLM_CHAT_FORMAT", "qwen"),
+        verbose=bool(int(os.environ.get("LLM_VERBOSE", "0"))),
+        seed=int(os.environ.get("LLM_SEED", "-1")),
+    )
 
 def chat_with_model(system_msg: str, user_msg: str) -> str:
-    resp = llm.create_chat_completion(
+    params: Dict[str, Any] = {
+        "temperature": float(os.environ.get("LLM_TEMPERATURE", "0.2")),
+        "top_p": float(os.environ.get("LLM_TOP_P", "0.9")),
+        "max_tokens": int(os.environ.get("LLM_MAX_NEW_TOKENS", "700")),
+        "repeat_penalty": float(os.environ.get("LLM_REPEAT_PENALTY", "1.05")),
+    }
+    stop_raw = os.environ.get("LLM_STOP", "").strip()
+    if stop_raw:
+        params["stop"] = [s for s in stop_raw.split("|||") if s]
+
+    resp = _llm().create_chat_completion(
         messages=[
             {"role": "system", "content": system_msg},
             {"role": "user",   "content": user_msg},
         ],
-        temperature=float(os.environ.get("LLM_TEMPERATURE", "0.2")),
-        top_p=float(os.environ.get("LLM_TOP_P", "0.9")),
-        max_tokens=int(os.environ.get("LLM_MAX_NEW_TOKENS", "600")),
-        repeat_penalty=1.05,
-        stop=["</s>"],
+        **params,
     )
-    return (resp["choices"][0]["message"]["content"] or "").strip()
+    try:
+        return (resp["choices"][0]["message"]["content"] or "").strip()
+    except Exception:
+        return ""
