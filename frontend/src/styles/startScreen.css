@@ -1,0 +1,51 @@
+.container {
+  padding: 140px 27px;
+  display: flex;
+  align-items: center;
+}
+
+.block-info {
+  display: flex;
+  gap: 28px;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 56px;
+}
+
+.small-info {
+  font-size: 24px;
+}
+
+.buttons {
+  display: flex;
+  gap: 16px;
+}
+
+.button {
+  padding: 12px 25px;
+  background-color: white;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 2px solid rgb(0, 0, 0, .15);
+  font-weight: 600;
+}
+
+.black-button {
+  background-color: #4f46e5;
+  border-color: #4f46e5;
+  color: white;
+}
+
+.black-button:hover {
+  background-color: white;
+  border-color: rgb(0, 0, 0, .15);
+  color: black;
+}
+
+.white-button:hover {
+  background-color: #4f46e5;
+  border-color: #4f46e5;
+  color: white;
+}
