@@ -3,11 +3,11 @@ from fastapi.responses import JSONResponse
 from starlette import status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from models_types import RequestAuth, RequestData, RequestReg
+from models_types import *
 from crypt_hs256 import Crypt
 from dotenv import load_dotenv
 from sqlite_connect import SqliteDatabase
-# from main import main
+from chat_engine import ask, start_chat
 import os
 
 load_dotenv()
@@ -30,15 +30,15 @@ class BackendApp(object):
         self.request = ""
 
     def init_routes(self):
-        # self.app.get('/') (self.root)                           # получение ответа от ассистента
+        self.app.post('/') (self.root)                           # получение ответа от ассистента
         self.app.post("/reg") (self.registration)               # регистрация   
         self.app.post("/auth") (self.authorization)             # авторизация
-        self.app.post('/check') (self.send_request)
-         # self.app.post("/send") (self.create_request)            # отправить вопрос ассистенту
+        self.app.post('/check') (self.send_request)             # проверка доступа
+        self.app.post("/chat") (self.create_chat)
     
-    # async def root(self):
-    #     self.answer = main(self.request) if self.request else 'no yet'
-    #     return JSONResponse({"message": self.answer}, status_code=status.HTTP_200_OK)
+    async def root(self, data: RequestData):
+        self.answer = ask(data.chat_id, data.question)
+        return JSONResponse({"message": self.answer}, status_code=status.HTTP_200_OK)
 
     async def registration(self, data: RequestReg):
         if len(data.login) <= 4 or len(data.password) <= 8:
@@ -50,6 +50,10 @@ class BackendApp(object):
         self.db._add_data("users", data)
         token = self.crypt.create_access_token({"sub": data['login']})
         return JSONResponse(content={"message": "successfully", "data": data, 'token': token}, status_code=status.HTTP_200_OK)
+    
+    async def create_chat(self, data: RequestChat):
+        chat_id = start_chat(data.title)
+        return JSONResponse(content={"message": "create chat", "chat_id": chat_id}, status_code=status.HTTP_200_OK)
     
     async def authorization(self, data: RequestAuth):
         all_data = self.db._get_data("users")
@@ -72,10 +76,7 @@ class BackendApp(object):
     async def send_request(self, data: RequestData, user):
         user = Depends(self.get_current_user(self))
         return {"message": f"Request received from {user['sub']}"}
-    
-    # async def create_request(self, data: RequestData):
-    #     self.request = data.question
-    #     return JSONResponse(content={"message": "request saved"}, status_code=status.HTTP_200_OK)
+
         
 backend = BackendApp()
 app = backend.app
