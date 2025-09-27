@@ -2,3 +2,4 @@ sql_chroma_db/
 models/
 venv/
 .env
+__pycache__/

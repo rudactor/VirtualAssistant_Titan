@@ -10,7 +10,7 @@ from langchain.schema import Document
 from embeddings_local_bge import LocalBGEM3Embeddings
 
 EMBEDDING_MODEL = "BAAI/bge-m3"
-DB_PATH = "./sql_chroma_db"
+DB_PATH = "backend/sql_chroma_db"
 BASE_DIR = "documentation"
 COLLECTION_NAME = "rzd_docs"
 
