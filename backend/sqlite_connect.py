@@ -12,15 +12,8 @@ class SqliteDatabase(object):
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY,
                     login TEXT,
-                    hash_password TEXT
-                )
-            ''')
-
-        self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS messages (
-                    id_user INTEGER PRIMARY KEY,
-                    message TEXT,
-                    is_answer BOOLEAN
+                    hash_password TEXT,
+                    chat_ids TEXT
                 )
             ''')
         
@@ -38,13 +31,17 @@ class SqliteDatabase(object):
                             )
         return data.fetchall()
     
+    def _update_data(self, chat_id: int, user_id: int):
+        self.cursor.execute("UPDATE users SET chat_ids = COALESCE(chat_ids, '') || ? WHERE id = ?",
+        (f",{chat_id}", user_id))
+        self.conn.commit()
+    
     def close(self):
         self.conn.close()
         
 data = {
     "login": '12345',
     "hash_password": '123513',
-    "role": '135513'
 }
         
 # # print(db._add_data("users", data))

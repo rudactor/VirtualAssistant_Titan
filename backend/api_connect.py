@@ -7,7 +7,7 @@ from models_types import *
 from crypt_hs256 import Crypt
 from dotenv import load_dotenv
 from sqlite_connect import SqliteDatabase
-from chat_engine import ask, start_chat
+from chat_engine import ask, start_chat, get_messages
 import os
 
 load_dotenv()
@@ -35,6 +35,7 @@ class BackendApp(object):
         self.app.post("/auth") (self.authorization)             # авторизация
         self.app.post('/check') (self.send_request)             # проверка доступа
         self.app.post("/chat") (self.create_chat)
+        self.app.put("/add_chat") (self._add_chat_to_user)
     
     async def root(self, data: RequestData):
         self.answer = ask(data.chat_id, data.question)
@@ -72,6 +73,14 @@ class BackendApp(object):
             return payload
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        
+    async def _add_chat_to_user(self, data: RequestAddChat):
+        self.db._update_data(data.chat_id, data.user_id)
+        return JSONResponse(content={"message": "added succesfully"}, status_code=status.HTTP_200_OK)
+    
+    async def _get_messages(self, data: RequestMessage):
+        data = get_messages(data.chat_id)
+        return JSONResponse(content={"data": data}, status_code=status.HTTP_200_OK)
         
     async def send_request(self, data: RequestData, user):
         user = Depends(self.get_current_user(self))

@@ -14,3 +14,10 @@ class RequestChat(BaseModel):
 class RequestAuth(BaseModel):
     login: str
     password: str
+    
+class RequestAddChat(BaseModel):
+    chat_id: int
+    user_id: int
+    
+class RequestMessage(BaseModel):
+    chat_id: int
