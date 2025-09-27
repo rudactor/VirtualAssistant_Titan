@@ -1,10 +1,8 @@
-# chat_engine.py
-import os, sqlite3, time
+import os, sqlite3, time, math
 from typing import List, Tuple
-import math
 from langchain_chroma import Chroma
 from embeddings_local_bge import LocalBGEM3Embeddings
-from llama_cpp_local_llm import chat_with_model
+from llama_cpp_local_llm import chat_with_model, count_tokens
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -17,20 +15,19 @@ DB_PATH = os.path.join(BACKEND_DIR, "sql_chroma_db")
 COLLECTION_NAME = "rzd_docs"
 
 # Контекст
-MAX_CTX_CHARS = 3000
-SUMMARIZE_AFTER_CHARS = 8000
+MAX_CTX_CHARS = 3000          # остаётся как вторичная «символьная» страховка
+SUMMARIZE_AFTER_CHARS = 8000  # можно снизить до 6000 при желании
 
 # RAG
-STRICT_RAG = False
+STRICT_RAG = True
 RAG_K = 12
-RAG_MAX_CHARS = 6000
-BASE_BAD_DISTANCE = 1.15
+RAG_MAX_CHARS = 6000          # вторичная «символьная» отсечка; основной контроль — по токенам
+BASE_BAD_DISTANCE = 0.6
 ADAPT_DELTA = 0.08
 SHOW_RAG_DEBUG = True
 
 MODEL_N_CTX = int(os.environ.get("LLM_CONTEXT", "4096"))
-TOKEN_MARGIN = 256        # запас на служебные токены
-AVG_CHARS_PER_TOKEN = 4.0
+TOKEN_MARGIN = 64  # небольшой резерв под стоп-токены и служебные
 
 # ========= SQLite =========
 def _db():
@@ -113,20 +110,29 @@ def _last_window(pairs: List[Tuple[str, str]], budget: int) -> List[Tuple[str, s
         acc.append((role, content)); used += L
     return list(reversed(acc))
 
-
-# ========== Помощники для бюджета ==========
-def _est_tokens(s: str) -> int:
-    return math.ceil(len(s) / AVG_CHARS_PER_TOKEN)
-
+# ========= Токенные утилиты =========
 def _join_until_token_budget(chunks: list[str], budget_tokens: int) -> str:
     out, used = [], 0
     for t in chunks:
-        need = _est_tokens(t) + 1  # +1 за разделитель
+        need = count_tokens(t) + 1
         if used + need > budget_tokens:
             break
         out.append(t); used += need
     return "\n\n".join(out)
 
+def _trim_to_tokens(text: str, max_tokens: int) -> str:
+    if count_tokens(text) <= max_tokens:
+        return text
+    low, high = 0, len(text)
+    best = ""
+    while low <= high:
+        mid = (low + high) // 2
+        cand = text[:mid]
+        if count_tokens(cand) <= max_tokens:
+            best = cand; low = mid + 1
+        else:
+            high = mid - 1
+    return best
 
 # ========= RAG (Chroma) =========
 _embeddings = LocalBGEM3Embeddings(model_name=EMBEDDING_MODEL)
@@ -134,16 +140,15 @@ _vector_store = Chroma(
     collection_name=COLLECTION_NAME,
     persist_directory=DB_PATH,
     embedding_function=_embeddings,
+    collection_metadata={"hnsw:space": "cosine"},  # фиксируем метрику
 )
 
 def _to_distance(score):
+    # Chroma для cosine возвращает distance (меньше — лучше). Возвращаем как есть.
     try:
-        s = float(score)
+        return float(score)
     except Exception:
         return None
-    if 0.0 <= s <= 1.0:
-        return 1.0 - s
-    return s
 
 def _retrieve(query: str, scope: str, k: int = RAG_K) -> List[str]:
     def fetch(filter_dict=None):
@@ -292,6 +297,7 @@ def ask(chat_id: int, user_input: str) -> str:
         add_message(chat_id, "assistant", msg)
         return msg
 
+    # История (символьное окно — как раньше, чтобы не раздувать; при сборке ниже ещё раз проверим токенами)
     msgs = _last_window(get_messages(chat_id), MAX_CTX_CHARS)
     history_text = ""
     for role, content in msgs:
@@ -305,23 +311,51 @@ def ask(chat_id: int, user_input: str) -> str:
         "Если нужного факта нет — вежливо попроси уточнить. "
         "Не упоминай материалы, источники или механики поиска."
     )
+
     prompt_header = history_text + "\n[Текущий вопрос]\n" + user_input + "\n\n" + instruction
     system_preview = _system_prompt(summary, "(материалы будут добавлены ниже)")
-    used_tokens = _est_tokens(system_preview) + _est_tokens(prompt_header) + TOKEN_MARGIN
-    rag_budget = max(0, MODEL_N_CTX - used_tokens)
 
-    rag_texts_trimmed = []
-    rag_chars = 0
-    for t in rag_texts:
-        if rag_chars + len(t) + 2 > RAG_MAX_CHARS:  # сохранён символный лимит
-            break
-        rag_texts_trimmed.append(t)
-        rag_chars += len(t) + 2
+    # ===== токенный бюджет на промпт =====
+    n_ctx = MODEL_N_CTX
+    reserve = TOKEN_MARGIN
+    base_budget = n_ctx - reserve
 
-    rag_block = _join_until_token_budget(rag_texts_trimmed, rag_budget)
+    base_used = count_tokens(system_preview) + count_tokens(prompt_header)
+    rag_budget = max(0, base_budget - base_used)
 
+    # Склеиваем RAG с учётом токенного бюджета
+    rag_block = _join_until_token_budget(rag_texts, rag_budget)
+
+    # Финальные system и prompt
     system_msg = _system_prompt(summary, rag_block)
     prompt = prompt_header
+
+    def total_prompt_tokens(sys_msg: str, usr_msg: str) -> int:
+        return count_tokens(f"[SYSTEM]\n{sys_msg}\n[USER]\n{usr_msg}")
+
+    ptoks = total_prompt_tokens(system_msg, prompt)
+
+    # Если не влезает — подрезаем по приоритету: RAG -> история -> инструкция
+    if ptoks > n_ctx - reserve:
+        need = (ptoks - (n_ctx - reserve)) + 32
+        target = max(0, count_tokens(rag_block) - need)
+        rag_block = _trim_to_tokens(rag_block, target)
+        system_msg = _system_prompt(summary, rag_block)
+        ptoks = total_prompt_tokens(system_msg, prompt)
+
+    if ptoks > n_ctx - reserve:
+        lines = [ln for ln in history_text.splitlines() if ln.strip()]
+        last_turn = "\n".join(lines[-6:]) if lines else ""
+        history_text = last_turn + ("\n" if last_turn else "")
+        prompt_header = history_text + "\n[Текущий вопрос]\n" + user_input + "\n\n" + instruction
+        prompt = prompt_header
+        ptoks = total_prompt_tokens(system_msg, prompt)
+
+    if ptoks > n_ctx - reserve:
+        short_instr = "Инструкция: отвечай только по материалам. Если факта нет — попроси уточнить."
+        prompt_header = history_text + "\n[Текущий вопрос]\n" + user_input + "\n\n" + short_instr
+        prompt = prompt_header
+        ptoks = total_prompt_tokens(system_msg, prompt)
 
     answer = chat_with_model(system_msg, prompt)
     add_message(chat_id, "assistant", answer)

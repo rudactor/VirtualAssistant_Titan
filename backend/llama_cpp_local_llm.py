@@ -1,4 +1,3 @@
-# llama_cpp_local_llm.py
 import os
 from functools import lru_cache
 from typing import Dict, Any
@@ -48,16 +47,36 @@ def _llm() -> Llama:
         seed=int(os.environ.get("LLM_SEED", "-1")),
     )
 
+# ===== токены =====
+def count_tokens(text: str) -> int:
+    """Подсчёт токенов тем же токенайзером llama.cpp (точно для нашего контекста)."""
+    try:
+        return len(_llm().tokenize(text.encode("utf-8"), add_bos=True))
+    except Exception:
+        # запасной грубый вариант
+        return len(text) // 4 + 1
+
+def safe_max_new_tokens(prompt_tokens: int, reserve: int = 64) -> int:
+    """Гарантирует, что prompt_tokens + max_new_tokens <= n_ctx - reserve."""
+    n_ctx = int(os.environ.get("LLM_CONTEXT", "4096"))
+    room = max(0, n_ctx - reserve - prompt_tokens)
+    cap = int(os.environ.get("LLM_MAX_NEW_TOKENS", "700"))
+    return max(16, min(cap, room))
+
 def chat_with_model(system_msg: str, user_msg: str) -> str:
     params: Dict[str, Any] = {
         "temperature": float(os.environ.get("LLM_TEMPERATURE", "0.2")),
         "top_p": float(os.environ.get("LLM_TOP_P", "0.9")),
-        "max_tokens": int(os.environ.get("LLM_MAX_NEW_TOKENS", "700")),
+        "max_tokens": int(os.environ.get("LLM_MAX_NEW_TOKENS", "700")),  # временно, ниже ужмём
         "repeat_penalty": float(os.environ.get("LLM_REPEAT_PENALTY", "1.05")),
     }
     stop_raw = os.environ.get("LLM_STOP", "").strip()
     if stop_raw:
         params["stop"] = [s for s in stop_raw.split("|||") if s]
+
+    approx_prompt = f"[SYSTEM]\n{system_msg}\n[USER]\n{user_msg}"
+    ptoks = count_tokens(approx_prompt)
+    params["max_tokens"] = safe_max_new_tokens(ptoks)
 
     resp = _llm().create_chat_completion(
         messages=[
