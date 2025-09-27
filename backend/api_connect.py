@@ -36,6 +36,7 @@ class BackendApp(object):
         self.app.post('/check') (self.send_request)             # проверка доступа
         self.app.post("/chat") (self.create_chat)
         self.app.put("/add_chat") (self._add_chat_to_user)
+        self.app.get('/messages') (self._get_messages)
     
     async def root(self, data: RequestData):
         self.answer = ask(data.chat_id, data.question)
