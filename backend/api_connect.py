@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from starlette import status
-from models import RequestAuth, RequestData, RequestReg
+from models_types import RequestAuth, RequestData, RequestReg
 from crypt_hs256 import Crypt
 from dotenv import load_dotenv
 from connect_to_db import DataBase
@@ -16,7 +16,6 @@ class BackendApp(object):
         self.db = DataBase()
         self.crypt = Crypt()
         self.init_routes()
-        self.ACCESS_TOKEN_EXPIRE_MINUTES = os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES")
         
         self.request = ""
 
@@ -46,7 +45,6 @@ class BackendApp(object):
 
         if user and self.crypt.decrypt(data.password, user["hashed_password"]):
             token = self.crypt.create_access_token({"sub": user["login"], "role": user["role"]})
-            print(token)
             return JSONResponse(content={"message": "you are authorized", "token": token}, status_code=status.HTTP_200_OK)
         else:
             return JSONResponse(content={"message": "login or password are not a correct"}, status_code=status.HTTP_200_OK)
