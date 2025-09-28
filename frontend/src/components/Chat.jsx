@@ -126,7 +126,6 @@ export default function Chat({checkToken}) {
 
         const result = await response.json()
         getMessages(currentChatId, currentChat)
-        console.log(result)
     }
 
     return (

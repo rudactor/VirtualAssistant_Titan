@@ -4,7 +4,18 @@ export default function Registration({ setPopup, setAuth }) {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
 
+  const [flagCheckReg, setFlagCheckReg] = useState(true);
+
+  const checkReg = () => {
+    return login.length > 4 && password.length > 8;
+  };
+
   const registerFetch = () => {
+    if (!checkReg()) {
+      setFlagCheckReg(false);
+      return;
+    }
+
     fetch("http://127.0.0.1:8000/reg", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,7 +43,9 @@ export default function Registration({ setPopup, setAuth }) {
         <input
           placeholder="Логин"
           value={login}
-          onChange={(e) => setLogin(e.target.value)}
+          onChange={(e) => {
+            setLogin(e.target.value);
+          }}
         />
         <input
           type="password"
@@ -40,7 +53,19 @@ export default function Registration({ setPopup, setAuth }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <button onClick={registerFetch}>Отправить</button>
+        {!flagCheckReg && (
+          <p style={{ color: "red" }}>Введите корректные данные</p>
+        )}
+        <button
+          onClick={registerFetch}
+          disabled={!checkReg()}
+          style={{
+            opacity: checkReg() ? 1 : 0.5,
+            cursor: checkReg() ? "pointer" : "not-allowed",
+          }}
+        >
+          Отправить
+        </button>
       </div>
     </div>
   );
