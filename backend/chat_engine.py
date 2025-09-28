@@ -102,11 +102,11 @@ def get_messages(chat_id: int) -> List[Tuple[str, str]]:
 
 # ========= История =========
 def _total_chars(pairs: List[Tuple[str, str]]) -> int:
-    return sum(len(c) for _, c in pairs)
+    return sum(len(c) for _, c, time in pairs)
 
 def _last_window(pairs: List[Tuple[str, str]], budget: int) -> List[Tuple[str, str]]:
     acc: List[Tuple[str, str]] = []; used = 0
-    for role, content in reversed(pairs):
+    for role, content, created_at in reversed(pairs):
         L = len(content)
         if used + L > budget:
             if not acc and budget > 200:

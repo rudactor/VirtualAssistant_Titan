@@ -6,6 +6,9 @@ export default function Chat({checkToken}) {
     const [load, setLoad] = useState(true)
     const [chats, setChats] = useState([])
     const [messages, setMessages] = useState([])
+    const [question, setQuestion] = useState('')
+
+    const [currentChatId, setCurrentChatId] = useState(0)
 
     const [newChatTitle, setNewChatTitle] = useState('');
 
@@ -48,6 +51,7 @@ export default function Chat({checkToken}) {
 
     const getMessages = async (chatId, title) => {
         setCurrentChat(title)
+        setCurrentChatId(chatId)
         const response = await fetch(`http://127.0.0.1:8000/messages`, {
             method: "POST",
             headers: {
@@ -86,6 +90,23 @@ export default function Chat({checkToken}) {
     fetchAddChat(newChatTitle)
     setChats(updatedChats);
   }
+
+    const askQuestion = async () => {
+        const questionUser = question
+        setQuestion('')
+        const response = await fetch(`http://127.0.0.1:8000/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ chat_id: currentChatId, question: questionUser })
+        }
+        )
+
+        const result = await response.json()
+        getMessages(currentChatId, currentChat)
+        console.log(result)
+    }
 
     return (
     <div className='container-chat'>
@@ -126,8 +147,11 @@ export default function Chat({checkToken}) {
                 })}
             </div>
             <div className="input-wrapper">
-                <input type="text" placeholder="Введите текст" />
-                <span className="arrow">➔</span>
+                <input type="text" placeholder="Введите текст" value={question} onChange={(e) => {
+                    console.log(e.target.value)
+                    setQuestion(e.target.value)
+                    }}/>
+                <button className="arrow" onClick={askQuestion}>➔</button>
             </div>
         </div>
     </div>
