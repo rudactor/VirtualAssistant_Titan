@@ -3,3 +3,4 @@ models/
 venv/
 .env
 __pycache__/
+sqlite.sqlite3
