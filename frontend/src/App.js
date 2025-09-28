@@ -22,9 +22,22 @@ function App() {
   };
 
   useEffect(() => {
-    if (localStorage.getItem("token")) {
-      setAuth(true);
-    }
+    const verifyToken = async () => {
+      try {
+        const message = await checkToken();
+
+        if (message) {
+          setAuth(true);
+        } else {
+          setAuth(false);
+        }
+      } catch (error) {
+        console.error("Ошибка при проверке токена:", error);
+        setAuth(false);
+      }
+    };
+
+    verifyToken();
   }, []);
 
   return (
