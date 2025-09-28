@@ -71,6 +71,16 @@ export default function Chat({checkToken}) {
         setMessages(messages)
     }
 
+    function formatText(text) {
+    const parts = text.split(/(\*\*.*?\*\*)/g); // делим по шаблону **...**
+    return parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={i}>{part.slice(2, -2)}</strong>; // убираем **
+        }
+        return <span key={i}>{part}</span>;
+    });
+    }
+
     useEffect(() => {
         getChats()
     }, [])
@@ -143,12 +153,11 @@ export default function Chat({checkToken}) {
             <h2>{currentChat}</h2>
             <div className='messages'>
                 {messages.map(message => {
-                    return (<div className={message.role === 'assistant' ? 'message assistent' : 'message user'}>{message.text}</div>)
+                    return (<div className={message.role === 'assistant' ? 'message assistent' : 'message user'}>{formatText(message.text)}</div>)
                 })}
             </div>
             <div className="input-wrapper">
                 <input type="text" placeholder="Введите текст" value={question} onChange={(e) => {
-                    console.log(e.target.value)
                     setQuestion(e.target.value)
                     }}/>
                 <button className="arrow" onClick={askQuestion}>➔</button>
