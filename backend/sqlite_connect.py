@@ -35,6 +35,10 @@ class SqliteDatabase(object):
         self.cursor.execute("UPDATE users SET chat_ids = COALESCE(chat_ids, '') || ? WHERE id = ?",
         (f",{chat_id}", user_id))
         self.conn.commit()
+        
+    def get_chats(self, user_id: int):
+        result = self.cursor.execute(f"SELECT chat_ids FROM users WHERE id = {user_id}").fetchall()
+        return result
     
     def close(self):
         self.conn.close()

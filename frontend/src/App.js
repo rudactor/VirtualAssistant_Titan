@@ -8,6 +8,19 @@ import NotFound from "./components/NotFound";
 function App() {
   const [auth, setAuth] = useState(false);
 
+  const checkToken = async () => {
+    const response = await fetch("http://127.0.0.1:8000/check", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+    const json = await response.json();
+    const result = await Promise.resolve(json);
+    return result.message;
+  };
+
   useEffect(() => {
     if (localStorage.getItem("token")) {
       setAuth(true);
@@ -23,7 +36,7 @@ function App() {
           ""
         )}
         {auth ? (
-          <Route path="/" element={<Chat />} />
+          <Route path="/" element={<Chat checkToken={checkToken} />} />
         ) : (
           <Route path="/" element={<StartScreen setAuth={setAuth} />} />
         )}

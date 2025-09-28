@@ -72,6 +72,11 @@ def chat_exists(chat_id: int) -> bool:
     conn.close()
     return ok
 
+def show_chats(chat_id: int) -> list:
+    conn = _db(); cur = conn.cursor()
+    result = cur.execute("SELECT id, title FROM chats WHERE id=?", (chat_id,)).fetchall()
+    return [[i['id'], i['title']] for i in result]
+
 def add_message(chat_id: int, role: str, content: str):
     conn = _db(); cur = conn.cursor()
     cur.execute("INSERT INTO messages(chat_id, role, content, created_at) VALUES (?,?,?,?)",
