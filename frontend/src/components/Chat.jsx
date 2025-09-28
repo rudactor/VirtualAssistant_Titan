@@ -1,7 +1,9 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useState, useRef} from 'react'
 import plus from '../static/plus-circle.svg'
 
 export default function Chat({checkToken}) {
+  const messagesEndRef = useRef(null)
+  
   const [load, setLoad] = useState(true)
   const [chats, setChats] = useState([])
   const [messages, setMessages] = useState([])
@@ -16,6 +18,14 @@ export default function Chat({checkToken}) {
     return new Date(ts).toLocaleString()
   }
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, loadingAssistant])
+
   const getChats = async () => { 
     const userId = await checkToken()
     setLoad(true)
@@ -27,7 +37,7 @@ export default function Chat({checkToken}) {
     const json = await response.json()
     const result = await Promise.resolve(json)
     const chats = result.data.flat().map(item => ({ id: item[0], title: item[1] }))
-    setChats(chats)
+    setChats(chats.reverse())
     setLoad(false)
   }
 
@@ -131,7 +141,7 @@ export default function Chat({checkToken}) {
                 onKeyDown={e => e.key === 'Enter' && handleSaveChat(index)}
               />
             ) : (
-              <button key={chat.id} onClick={() => getMessages(chat.id, chat.title)}>
+              <button key={chat.id} onClick={() => getMessages(chat.id, chat.title)} className={chat.id === currentChatId ? "active" : ""}>
                 {chat.title}
               </button>
             )
@@ -154,6 +164,7 @@ export default function Chat({checkToken}) {
               <p className='content'>Ассистент печатает...</p>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         <div className="input-wrapper">

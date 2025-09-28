@@ -81,6 +81,11 @@
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
+.chats button.active {
+  background: linear-gradient(145deg, rgba(79, 70, 229, 1), rgba(99, 102, 241, 0.95)); /* зелёный градиент */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
 .chats button:hover {
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
   background: linear-gradient(145deg, rgba(79, 70, 229, 1), rgba(99, 102, 241, 0.95));
