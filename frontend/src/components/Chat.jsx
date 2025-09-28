@@ -52,6 +52,7 @@ export default function Chat({checkToken}) {
     const getMessages = async (chatId, title) => {
         setCurrentChat(title)
         setCurrentChatId(chatId)
+        console.log(chatId)
         const response = await fetch(`http://127.0.0.1:8000/messages`, {
             method: "POST",
             headers: {
@@ -74,8 +75,12 @@ export default function Chat({checkToken}) {
     function formatText(text) {
     const parts = text.split(/(\*\*.*?\*\*)/g); // делим по шаблону **...**
     return parts.map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
+        if (part.startsWith("**") && part.endsWith("**") || part.startsWith("*") && part.endsWith("*")) {
+            if (part.startsWith("**") && part.endsWith("**")) {
         return <strong key={i}>{part.slice(2, -2)}</strong>; // убираем **
+            } else if (part.startsWith("*") && part.endsWith("*")) {
+                return <strong key={i}>{part.slice(1, -1)}</strong>;
+            }
         }
         return <span key={i}>{part}</span>;
     });
@@ -104,6 +109,12 @@ export default function Chat({checkToken}) {
     const askQuestion = async () => {
         const questionUser = question
         setQuestion('')
+        const newMessage = {
+            role: 'user',
+            text: questionUser,
+            timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, newMessage])
         const response = await fetch(`http://127.0.0.1:8000/`, {
             method: "POST",
             headers: {
