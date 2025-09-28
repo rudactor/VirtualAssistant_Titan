@@ -10,6 +10,8 @@
 .leftBar {
     padding: 32px;
     width: 400px;
+    display: flex;
+    flex-direction: column; /* важно для правильной работы flex */
     border-radius: 16px;
     background-color: rgb(0, 0, 0, .05);
 }
@@ -46,9 +48,9 @@
     display: flex;
     flex-direction: column;
     gap: 15px;
-    max-height: calc(100vh - 150px); /* подгоняем под высоту окна */
+    flex-grow: 1;
     overflow-y: auto;
-    padding-right: 10px; /* чтобы скролл не налазил на контент */
+    padding-right: 10px;
 }
 
 /* Опционально: стиль скроллбара */
