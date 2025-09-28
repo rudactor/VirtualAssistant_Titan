@@ -82,6 +82,8 @@ class BackendApp(object):
         return JSONResponse(content={"data": data}, status_code=status.HTTP_200_OK)
     
     async def _get_chats(self, data: RequestAllChats):
+        print(data)
+        print(self.db.get_chats(data.user_id))
         if self.db.get_chats(data.user_id)[0][0] == None:
             return JSONResponse(content={'data': []}, status_code=status.HTTP_200_OK)
         result = [int(i) for i in self.db.get_chats(data.user_id)[0][0].split(',') if i != '']

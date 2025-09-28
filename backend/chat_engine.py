@@ -6,30 +6,29 @@ from llama_cpp_local_llm import chat_with_model, count_tokens
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ========= Конфиг =========
 DB_FILE = os.path.join(BACKEND_DIR, "chatbot.sqlite3")
 
-# Векторное хранилище (Chroma)
 EMBEDDING_MODEL = "BAAI/bge-m3"
 DB_PATH = os.path.join(BACKEND_DIR, "sql_chroma_db")
 COLLECTION_NAME = "rzd_docs"
 
-# Контекст
-MAX_CTX_CHARS = 3000          # остаётся как вторичная «символьная» страховка
-SUMMARIZE_AFTER_CHARS = 8000  # можно снизить до 6000 при желании
+MAX_CTX_CHARS = 3000
+SUMMARIZE_AFTER_CHARS = 8000
 
-# RAG
 STRICT_RAG = True
 RAG_K = 12
-RAG_MAX_CHARS = 6000          # вторичная «символьная» отсечка; основной контроль — по токенам
-BASE_BAD_DISTANCE = 0.6       # <= главное изменение (адекватно для cosine distance)
+RAG_MAX_CHARS = 6000
+BASE_BAD_DISTANCE = 0.9
 ADAPT_DELTA = 0.08
 SHOW_RAG_DEBUG = True
+FALLBACK_REPLY = (
+    "Недостаточно релевантных материалов для точного ответа. "
+    "Пожалуйста, уточните объект/подсистему и источник (ГОСТ/ПТЭ/СТО/инструкция, раздел/пункт)."
+)
 
 MODEL_N_CTX = int(os.environ.get("LLM_CONTEXT", "4096"))
-TOKEN_MARGIN = 64  # небольшой резерв под стоп-токены и служебные
+TOKEN_MARGIN = 64
 
-# ========= SQLite =========
 def _db():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
@@ -100,22 +99,22 @@ def get_messages(chat_id: int) -> List[Tuple[str, str]]:
     rows = cur.fetchall(); conn.close()
     return [(r["role"], r["content"], r['created_at']) for r in rows]
 
-# ========= История =========
 def _total_chars(pairs: List[Tuple[str, str]]) -> int:
-    return sum(len(c) for _, c, time in pairs)
+    return sum(len(c) for _, c, _ in pairs)
 
-def _last_window(pairs: List[Tuple[str, str]], budget: int) -> List[Tuple[str, str]]:
-    acc: List[Tuple[str, str]] = []; used = 0
+def _last_window(pairs: List[Tuple[str, str, float]], budget: int) -> List[Tuple[str, str, float]]:
+    acc: List[Tuple[str, str, float]] = []
+    used = 0
     for role, content, created_at in reversed(pairs):
         L = len(content)
         if used + L > budget:
             if not acc and budget > 200:
-                acc.append((role, content[-budget:]))
+                acc.append((role, content[-budget:], created_at))
             break
-        acc.append((role, content)); used += L
+        acc.append((role, content, created_at))
+        used += L
     return list(reversed(acc))
 
-# ========= Токенные утилиты =========
 def _join_until_token_budget(chunks: list[str], budget_tokens: int) -> str:
     out, used = [], 0
     for t in chunks:
@@ -139,17 +138,15 @@ def _trim_to_tokens(text: str, max_tokens: int) -> str:
             high = mid - 1
     return best
 
-# ========= RAG (Chroma) =========
 _embeddings = LocalBGEM3Embeddings(model_name=EMBEDDING_MODEL)
 _vector_store = Chroma(
     collection_name=COLLECTION_NAME,
     persist_directory=DB_PATH,
     embedding_function=_embeddings,
-    collection_metadata={"hnsw:space": "cosine"},  # фиксируем метрику
+    collection_metadata={"hnsw:space": "cosine"},
 )
 
 def _to_distance(score):
-    # Chroma для cosine возвращает distance (меньше — лучше). Возвращаем как есть.
     try:
         return float(score)
     except Exception:
@@ -187,12 +184,13 @@ def _retrieve(query: str, scope: str, k: int = RAG_K) -> List[str]:
             continue
 
         best = min(numeric)
-        bad_threshold = max(BASE_BAD_DISTANCE, best + ADAPT_DELTA)
+        adaptive_threshold = best + ADAPT_DELTA
+        hard_cap = BASE_BAD_DISTANCE
 
         used_chars = 0
         for doc, score in sorted(results, key=lambda x: _to_distance(x[1]) if _to_distance(x[1]) is not None else 9e9):
             dist = _to_distance(score)
-            if dist is None or dist > bad_threshold:
+            if dist is None or dist > hard_cap or dist > adaptive_threshold:
                 continue
             t = (doc.page_content or "").strip()
             if not t:
@@ -219,11 +217,10 @@ def _retrieve(query: str, scope: str, k: int = RAG_K) -> List[str]:
                 src = doc.metadata.get("source"); page = doc.metadata.get("page")
                 print(f"    #{i} [{label}] dist={dist:.4f} | source={src} | page={page} | len={len((doc.page_content or '').strip())}")
         else:
-            print("[RAG DEBUG] ничего не отобрано по адаптивному порогу")
+            print("[RAG DEBUG] ничего не отобрано по жёсткому порогу")
 
     return [doc.page_content.strip() for _, doc, _ in picked]
 
-# ========= Сжатие истории =========
 def _summarize(chat_id: int):
     msgs = get_messages(chat_id)
     if _total_chars(msgs) <= SUMMARIZE_AFTER_CHARS:
@@ -234,14 +231,13 @@ def _summarize(chat_id: int):
     buf = []
     if current:
         buf.append(f"[Текущее резюме]\n{current}\n")
-    for role, content in msgs:
+    for role, content, _ in msgs:
         tag = "Пользователь" if role == "user" else "Ассистент" if role == "assistant" else "Система"
         buf.append(f"{tag}: {content}")
     new_summary = chat_with_model(sys, "\n".join(buf)).strip()
     if new_summary:
         set_chat_summary(chat_id, new_summary)
 
-# ========= Промпты =========
 def _clarify(user_input: str) -> str:
     return (
         "Недостаточно данных в базе для точного ответа.\n"
@@ -264,7 +260,6 @@ def _system_prompt(summary: str, rag_block: str) -> str:
     parts.append("\n[Материалы]\n" + (rag_block if rag_block else "(пусто)"))
     return "\n".join(parts)
 
-# ========= Диагностика =========
 def debug_find(query: str, scope: str, k: int = RAG_K) -> str:
     def fetch(filter_dict=None):
         try:
@@ -287,7 +282,6 @@ def debug_find(query: str, scope: str, k: int = RAG_K) -> str:
             lines.append(f"      {preview}")
     return "\n".join(lines)
 
-# ========= Основной вызов =========
 def ask(chat_id: int, user_input: str) -> str:
     add_message(chat_id, "user", user_input)
 
@@ -298,14 +292,12 @@ def ask(chat_id: int, user_input: str) -> str:
     rag_texts = _retrieve(user_input, scope, k=RAG_K)
 
     if STRICT_RAG and not rag_texts:
-        msg = _clarify(user_input)
-        add_message(chat_id, "assistant", msg)
-        return msg
+        add_message(chat_id, "assistant", FALLBACK_REPLY)
+        return FALLBACK_REPLY
 
-    # История (символьное окно — как раньше, чтобы не раздувать; при сборке ниже ещё раз проверим токенами)
     msgs = _last_window(get_messages(chat_id), MAX_CTX_CHARS)
     history_text = ""
-    for role, content in msgs:
+    for role, content, _ in msgs:
         if role == "system":
             continue
         who = "Пользователь" if role == "user" else "Ассистент"
@@ -320,7 +312,6 @@ def ask(chat_id: int, user_input: str) -> str:
     prompt_header = history_text + "\n[Текущий вопрос]\n" + user_input + "\n\n" + instruction
     system_preview = _system_prompt(summary, "(материалы будут добавлены ниже)")
 
-    # ===== токенный бюджет на промпт =====
     n_ctx = MODEL_N_CTX
     reserve = TOKEN_MARGIN
     base_budget = n_ctx - reserve
@@ -328,10 +319,8 @@ def ask(chat_id: int, user_input: str) -> str:
     base_used = count_tokens(system_preview) + count_tokens(prompt_header)
     rag_budget = max(0, base_budget - base_used)
 
-    # Склеиваем RAG с учётом токенного бюджета
     rag_block = _join_until_token_budget(rag_texts, rag_budget)
 
-    # Финальные system и prompt
     system_msg = _system_prompt(summary, rag_block)
     prompt = prompt_header
 
@@ -340,7 +329,6 @@ def ask(chat_id: int, user_input: str) -> str:
 
     ptoks = total_prompt_tokens(system_msg, prompt)
 
-    # Если не влезает — подрезаем по приоритету: RAG -> история -> инструкция
     if ptoks > n_ctx - reserve:
         need = (ptoks - (n_ctx - reserve)) + 32
         target = max(0, count_tokens(rag_block) - need)
