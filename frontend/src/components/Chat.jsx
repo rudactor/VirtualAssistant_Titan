@@ -14,6 +14,16 @@ export default function Chat({checkToken}) {
 
     const [currentChat, setCurrentChat] = useState('')
 
+    const [loadingAssistant, setLoadingAssistant] = useState(false);
+
+    function formatTimestamp(ts) {
+        if (!isNaN(ts)) {
+            return new Date(ts * 1000).toLocaleString(); 
+        }
+
+        return new Date(ts).toLocaleString();
+    }
+
     const getChats = async () => { 
             const userId = await checkToken()
             setLoad(true)
@@ -52,7 +62,6 @@ export default function Chat({checkToken}) {
     const getMessages = async (chatId, title) => {
         setCurrentChat(title)
         setCurrentChatId(chatId)
-        console.log(chatId)
         const response = await fetch(`http://127.0.0.1:8000/messages`, {
             method: "POST",
             headers: {
@@ -68,7 +77,6 @@ export default function Chat({checkToken}) {
             text: msg[1],
             timestamp: msg[2]
         }));
-
         setMessages(messages)
     }
 
@@ -115,6 +123,9 @@ export default function Chat({checkToken}) {
             timestamp: new Date().toISOString(),
         };
         setMessages(prev => [...prev, newMessage])
+
+        setLoadingAssistant(true);
+
         const response = await fetch(`http://127.0.0.1:8000/`, {
             method: "POST",
             headers: {
@@ -126,6 +137,8 @@ export default function Chat({checkToken}) {
 
         const result = await response.json()
         getMessages(currentChatId, currentChat)
+
+        setLoadingAssistant(false);
     }
 
     return (
@@ -163,8 +176,17 @@ export default function Chat({checkToken}) {
             <h2>{currentChat}</h2>
             <div className='messages'>
                 {messages.map(message => {
-                    return (<div className={message.role === 'assistant' ? 'message assistent' : 'message user'}>{formatText(message.text)}</div>)
+                    return (<div className={message.role === 'assistant' ? 'message assistent' : 'message user'}>
+                        <p className='content'>{formatText(message.text)}</p>
+                        <p className='timestamp'>{formatTimestamp(message.timestamp)}</p>
+                        </div>)
                 })}
+
+                {loadingAssistant && (
+                    <div className='message assistent'>
+                        <p className='content'>Ассистент печатает...</p>
+                    </div>
+                )}
             </div>
             <div className="input-wrapper">
                 <input type="text" placeholder="Введите текст" value={question} onChange={(e) => {

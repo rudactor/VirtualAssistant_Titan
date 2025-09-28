@@ -45,7 +45,24 @@
 .chats {
     display: flex;
     flex-direction: column;
-    gap: 30px;
+    gap: 15px;
+    max-height: calc(100vh - 150px); /* подгоняем под высоту окна */
+    overflow-y: auto;
+    padding-right: 10px; /* чтобы скролл не налазил на контент */
+}
+
+/* Опционально: стиль скроллбара */
+.chats::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chats::-webkit-scrollbar-thumb {
+    background-color: rgba(79, 70, 229, 0.5);
+    border-radius: 3px;
+}
+
+.chats::-webkit-scrollbar-track {
+    background-color: transparent;
 }
 
 .chats button {
@@ -63,7 +80,6 @@
 }
 
 .chats button:hover {
-  transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
   background: linear-gradient(145deg, rgba(79, 70, 229, 1), rgba(99, 102, 241, 0.95));
 }
@@ -122,9 +138,32 @@
 }
 
 .message {
-    margin-bottom: 25px;
-    padding: 25px;
+    margin-bottom: 15px;
+    padding: 15px 20px 25px 20px; /* нижний padding побольше, чтобы время не накладывалось */
     border-radius: 15px;
+    position: relative; /* для позиционирования времени */
+    display: inline-block;
+    max-width: 80%; /* чтобы сообщения не растягивались на всю ширину */
+    word-wrap: break-word;
+}
+
+/* Внутри сообщения делим на текст и время */
+.message .content {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.message .timestamp {
+    position: absolute;
+    bottom: 5px;
+    right: 10px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7); /* для assistant, для user можно поменять */
+}
+
+/* для пользовательских сообщений можно сделать цвет темнее */
+.user .timestamp {
+    color: rgba(0, 0, 0, 0.5);
 }
 
 .assistent {
@@ -133,6 +172,7 @@
 }
 
 .user {
+    margin-left: auto;
     background-color: rgb(0, 0, 0, 0.25);
 }
 
@@ -163,6 +203,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  outline: none;
+  border: none;
   cursor: pointer;
   font-size: 16px;
 }
